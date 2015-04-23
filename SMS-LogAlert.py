@@ -2,7 +2,7 @@
 
 # Quick script that alerts on iptable logs
 # You must set these things:
-#------------------------------
+# ------------------------------
 # (1) User and password of SMTP Server, if using GMAIL insure using unsecure app settings
 # (2) Recipients of the SMS need to be in list format
 # (3) Email addr must use proper SMS format per company .. ex ATT= txt.att.net
@@ -16,29 +16,59 @@ import sys
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+global Source_IP_List
+
+
+Source_IP_List = []
+
+
+
+
 #HTML needs to be un "#""
 
 
 def cli_parser():
-	 parser = argparse.ArgumentParser(add_help=False, description="This script will monito a iptables log and aler by SMS")
+	 parser = argparse.ArgumentParser(add_help=False, description='''This script will monito a iptables log and alert by SMS,
+	 	(1) Please ensure you provided User-Name and Password for SMTP for SMS.
+	 	(2) Provide opitional Iptables log 
+	 	(3) Use Gmail for your email provider
+	 	''')
 	 parser.add_argument("-t", metavar="10", type=int, default=10, help="Will tell how long between log checks in Secs, defaults to 10 Secs.")
-	 parser.add_argument("-sms", metavar="10", type=int, default=100, help="Max SMS texts that can recived before it shuts down, default is 100.")
+	 parser.add_argument("-s", metavar="10", type=int, default=100, help="Max SMS texts that can recived before it shuts down, default is 100.")
 	 parser.add_argument("-e", metavar="email@eamil.com", help="Set required email addr user, ex ale@email.com")
 	 parser.add_argument("-p", metavar="1234", help="Set required email password")
+	 parser.add_argument("-log", metavar="/var/log/iptables.log", default="/var/log/iptables.log", help="Set a log to parse")
 	 parser.add_argument('-h', '-?', '--h', '-help', '--help', action="store_true", help=argparse.SUPPRESS)
 	 args = parser.parse_args()
 	 if args.h: 
 			parser.print_help()
 			sys.exit()
-	 return args.t, args.sms, args.e, args.p
+	 return args.t, args.s, args.e, args.p, args.log
+
+def smtp_check(senders_email, senders_password):
+	#Try a conncetion to GMAIL's server to test cred
+	try: 
+		mail = smtplib.SMTP('smtp.gmail.com', 587)
+		mail.ehlo()
+		mail.starttls()
+		mail.login(senders_email, senders_password)
+		mail.quit
+	except smtplib.SMTPConnectError as error:
+		print "[*] Error occurred during establishment of a connection with the server."
+		exit()
+	except smtplib.SMTPAuthenticationError as error:
+		print "[*] SMTP AUthentication error Plese Check Email and Password and Try again!"
+		exit()
 
 
 def mail(text_alert, max_sms, senders_email, senders_password): 
-	recipient = ['213xxxxxx@txt.att.net']
+	global sms
+	recipient = ['xx@txt.att.net']
+	#recipient = ['xx@txt.att.net', 'xx@tmomail.net']
 
 	# Create message container - the correct MIME type is multipart/alternative.
 	msg = MIMEMultipart('alternative')
-	msg['Subject'] = "YOU HAVE MAIL"
+	msg['Subject'] = "ADT-ALERT"
 	msg['From'] = senders_email
 	msg['To'] = ", ".join(recipient)
 
@@ -74,17 +104,16 @@ def mail(text_alert, max_sms, senders_email, senders_password):
 	mail.sendmail(senders_email, recipient, msg.as_string())
 	mail.quit()
 	print "[*] Message has been sent!"
-	max_sms = max_sms - 1
+	sms_check(max_sms)
 	return max_sms
 
 
 #This function monitors the log file 
-def syslog_mon(sleep_time, max_sms, senders_email, senders_password):
+def syslog_mon(sleep_time, max_sms, senders_email, senders_password, iptables_log):
 	#Use log_file to point to the log you need to monitor
-		log_file = "/var/log/iptables.log"
 		while True:
 			try:
-				f = open(log_file, "r")
+				f = open(iptables_log, "r")
 				try:
 				# OR read one line at a time.
 					log_data = f.readlines()
@@ -99,16 +128,26 @@ def syslog_mon(sleep_time, max_sms, senders_email, senders_password):
 						for element in Listed_data:
 							if "SRC" in element:
 								SRC_IP=element
-								print "[*] We Have a CALLBACK at:", element
-								mail(SRC_IP, max_sms, senders_email, senders_password)
-								clear_file() 
+								#Now check IP to see if it has been sent yet.
+								ip_check(SRC_IP, max_sms, senders_email, senders_password)
 								break
 				except IOError:
 					pass
 			except IOError:
 				pass
 			sleep(sleep_time)
-			sms_check(max_sms)
+
+#This function will check to see if the IP SMS has been sent yet, or add it the dict
+def ip_check(SRC_IP, max_sms, senders_email, senders_password): 
+	if SRC_IP in Source_IP_List:
+		return
+	else:
+		Source_IP_List.append(SRC_IP)
+		print "[*] We Have a CALLBACK at:", SRC_IP
+		mail(SRC_IP, max_sms, senders_email, senders_password)
+		clear_file()
+	return
+
 
 
 #Open and clear th file for future Alets
@@ -122,16 +161,18 @@ def clear_file():
 		pass  
 
 def sms_check(max_sms):
-	if max_sms > 0:
-		return
-	if max_sms < 1:
+	max_sms = max_sms - 1
+	if max_sms <= 1:
 		print "[*] Reached max SMS count"
 		exit()
-
+	else:
+		print "[*]", max_sms, "SMS remaing"
+		return max_sms
+	
 
  #Sleep so you wont block file   
 def sleep(how_long):
-	 print "[*] Sleeping for:", how_long, "second(s)"
+	 print "[*] Sleeping for interval of:", how_long, "second(s)"
 	 time.sleep(how_long)
 	
 
@@ -146,19 +187,23 @@ This tools is for SMS log alerting on target Log \n "
 
 
 def main():
-	#assign CLI vars
-	cli_time, cli_sms, cli_user, cli_pass = cli_parser()
+	title()
+	cli_time, cli_sms, cli_user, cli_pass, cli_log = cli_parser()
+
+	#Performing checks to ensure proper delivery of SMS messages.
 	if cli_user is None:
 		print "[*] missing User-Name for SMTP login.. Now quiting"
 		exit()
 	if cli_pass is None:
 		print "[*] missing Password for SMTP login.. Now quiting"
 		exit()
-	#call title menu
-	title()
-	
-	#call log monitoring
-	syslog_mon(cli_time, cli_sms, cli_user, cli_pass)
+	if cli_log == "/var/log/iptables.log":
+		print "[*] WARNING Defualt log path is being used"
+	#Try to connect to your SMTP server
+
+	smtp_check(cli_user, cli_pass)
+	syslog_mon(cli_time, cli_sms, cli_user, cli_pass, cli_log)
+
 
 if __name__ == "__main__":
 	try:	
@@ -169,6 +214,4 @@ if __name__ == "__main__":
 			sys.exit(0)
 		except SystemExit:
 			os._exit(0)
-
-
 
