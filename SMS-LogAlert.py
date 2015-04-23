@@ -1,6 +1,11 @@
 #!/usr/bin/python
 
 # Quick script that alerts on iptable logs
+# You must set these things:
+#------------------------------
+# (1) User and password of SMTP Server, if using GMAIL insure using unsecure app settings
+# (2) Recipients of the SMS need to be in list format
+# (3) Email addr must use proper SMS format per company .. ex ATT= txt.att.net
 
 import smtplib
 import os 
@@ -18,23 +23,23 @@ def cli_parser():
 	 parser = argparse.ArgumentParser(add_help=False, description="This script will monito a iptables log and aler by SMS")
 	 parser.add_argument("-t", metavar="10", type=int, default=10, help="Will tell how long between log checks in Secs, defaults to 10 Secs.")
 	 parser.add_argument("-sms", metavar="10", type=int, default=100, help="Max SMS texts that can recived before it shuts down, default is 100.")
+	 parser.add_argument("-e", metavar="email@eamil.com", help="Set required email addr user, ex ale@email.com")
+	 parser.add_argument("-p", metavar="1234", help="Set required email password")
 	 parser.add_argument('-h', '-?', '--h', '-help', '--help', action="store_true", help=argparse.SUPPRESS)
 	 args = parser.parse_args()
 	 if args.h: 
 			parser.print_help()
 			sys.exit()
-	 return args.t, args.sms
+	 return args.t, args.sms, args.e, args.p
 
 
-def mail(text_alert, max_sms):
-	sender = "atdalert@gmail.com" 
-	recipient = ['xx@txt.att.net']
-	#recipient = ['xx@txt.att.net', 'xx@tmomail.net', 'xx@vtext.com', 'xx@xx']
+def mail(text_alert, max_sms, senders_email, senders_password): 
+	recipient = ['213xxxxxx@txt.att.net']
 
 	# Create message container - the correct MIME type is multipart/alternative.
 	msg = MIMEMultipart('alternative')
-	msg['Subject'] = "COBALT"
-	msg['From'] = sender
+	msg['Subject'] = "YOU HAVE MAIL"
+	msg['From'] = senders_email
 	msg['To'] = ", ".join(recipient)
 
 # Create the body of the message (a plain-text and an HTML version).
@@ -65,8 +70,8 @@ def mail(text_alert, max_sms):
 	mail = smtplib.SMTP('smtp.gmail.com', 587)
 	mail.ehlo()
 	mail.starttls()
-	mail.login('YOUREMAIL@EMAIL.COM', 'PASSWORD INSERT HERE')
-	mail.sendmail(sender, recipient, msg.as_string())
+	mail.login(senders_email, senders_password)
+	mail.sendmail(senders_email, recipient, msg.as_string())
 	mail.quit()
 	print "[*] Message has been sent!"
 	max_sms = max_sms - 1
@@ -74,7 +79,7 @@ def mail(text_alert, max_sms):
 
 
 #This function monitors the log file 
-def syslog_mon(sleep_time, max_sms):
+def syslog_mon(sleep_time, max_sms, senders_email, senders_password):
 	#Use log_file to point to the log you need to monitor
 		log_file = "/var/log/iptables.log"
 		while True:
@@ -95,7 +100,7 @@ def syslog_mon(sleep_time, max_sms):
 							if "SRC" in element:
 								SRC_IP=element
 								print "[*] We Have a CALLBACK at:", element
-								mail(SRC_IP, max_sms)
+								mail(SRC_IP, max_sms, senders_email, senders_password)
 								clear_file() 
 								break
 				except IOError:
@@ -142,12 +147,18 @@ This tools is for SMS log alerting on target Log \n "
 
 def main():
 	#assign CLI vars
-	cli_time, cli_sms, = cli_parser()
+	cli_time, cli_sms, cli_user, cli_pass = cli_parser()
+	if cli_user is None:
+		print "[*] missing User-Name for SMTP login.. Now quiting"
+		exit()
+	if cli_pass is None:
+		print "[*] missing Password for SMTP login.. Now quiting"
+		exit()
 	#call title menu
 	title()
 	
 	#call log monitoring
-	syslog_mon(cli_time, cli_sms)
+	syslog_mon(cli_time, cli_sms, cli_user, cli_pass)
 
 if __name__ == "__main__":
 	try:	
