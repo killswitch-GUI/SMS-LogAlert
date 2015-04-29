@@ -16,7 +16,8 @@ Allows a user to alert on keywords from alert genrated from logs like IPtables a
 - Sets specfic log file and time between checks
 
 
-OPTIONS:
+[*]OPTIONS:
+
 -t = Will tell how long between log checks in Secs, defaults to 10 Secs. 
 
 -s = Max SMS texts that can recived before it shuts down, default is 100. 
