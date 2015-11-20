@@ -12,6 +12,8 @@ import os
 import time
 import argparse
 import sys
+from Common import TaskController
+from Common import Helpers
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -33,17 +35,20 @@ def cli_parser():
 	 	(2) Provide opitional Iptables log 
 	 	(3) Use Gmail for your email provider
 	 	''')
+	 parser.add_argument(
+        "-l", action='store_true', help="List the current Modules Loaded")
 	 parser.add_argument("-t", metavar="10", type=int, default=10, help="Will tell how long between log checks in Secs, defaults to 10 Secs.")
 	 parser.add_argument("-s", metavar="10", type=int, default=100, help="Max SMS texts that can recived before it shuts down, default is 100.")
 	 parser.add_argument("-e", metavar="email@eamil.com", help="Set required email addr user, ex ale@email.com")
 	 parser.add_argument("-p", metavar="1234", help="Set required email password")
+	 parser.add_argument("-r", metavar="alex@gmail.com,a@yahoo.com", help="Set the Recipients")
 	 parser.add_argument("-log", metavar="/var/log/iptables.log", default="/var/log/iptables.log", help="Set a log to parse")
 	 parser.add_argument('-h', '-?', '--h', '-help', '--help', action="store_true", help=argparse.SUPPRESS)
 	 args = parser.parse_args()
 	 if args.h: 
 			parser.print_help()
 			sys.exit()
-	 return args.t, args.s, args.e, args.p, args.log
+	 return args.l, args.t, args.s, args.e, args.p, args.r, args.log
 
 def smtp_check(senders_email, senders_password):
 	#Try a conncetion to GMAIL's server to test cred
@@ -176,21 +181,20 @@ def sleep(how_long):
 	 time.sleep(how_long)
 	
 
-def title():
-	print "\n\
-		##############################\n\
-		#     SCRIPT  KID  THING     #\n\
-		#        KiLlSwiTch-GUI      #\n\
-		##############################\n\
-This tools is for SMS log alerting on target Log \n "
-
 
 
 def main():
-	title()
-	cli_time, cli_sms, cli_user, cli_pass, cli_log = cli_parser()
+	Helpers.title()
+	cli_list, cli_time, cli_sms, cli_user, cli_pass, cli_recp, cli_log = cli_parser()
+ 	Task = TaskController.Conducter()
+ 	if cli_list:
+		Task.ListModules()
+		exit()
 
 	#Performing checks to ensure proper delivery of SMS messages.
+	if cli_recp is None:
+		print "[*] missing Recipients... Now quiting"
+		exit()
 	if cli_user is None:
 		print "[*] missing User-Name for SMTP login.. Now quiting"
 		exit()
@@ -200,7 +204,6 @@ def main():
 	if cli_log == "/var/log/iptables.log":
 		print "[*] WARNING Defualt log path is being used"
 	#Try to connect to your SMTP server
-
 	smtp_check(cli_user, cli_pass)
 	syslog_mon(cli_time, cli_sms, cli_user, cli_pass, cli_log)
 
